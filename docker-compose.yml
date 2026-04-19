@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-collector
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Конфигурация (можно менять без пересборки образа)
+      - ./config:/app/config
+      # Отладочные файлы (HTML дампы CyberLeninka и т.д.)
+      - ./debug:/app/debug
+      # Экспортированные данные
+      - ./export:/app/export
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Healthcheck: проверяем, что API отвечает
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

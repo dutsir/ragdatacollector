@@ -1,0 +1,151 @@
+# RAG Data Collector - конфигурация
+# PDF не скачиваются — сохраняется только ссылка на файл. Текст берётся из HTML страницы статьи.
+
+# PostgreSQL (если задан — задачи и документы хранятся в БД)
+# Или задайте переменную окружения: DATABASE_URL=postgresql://postgres:ВАШ_ПАРОЛЬ@localhost:5432/parser_1state
+database:
+  url: "postgresql://postgres:root@localhost:5432/parser_1state"
+  # Подставьте свой пароль postgres или задайте DATABASE_URL в env
+  # url: ""   # пусто = только in-memory
+
+app:
+  name: "rag-data-collector"
+  debug: false
+  request_delay_min: 2
+  request_delay_max: 5
+  # Таймаут одной задачи сбора (сек). При долгом сборе (много статей, Playwright) увеличьте (напр. 1200–1800).
+  collection_timeout_sec: 1200
+
+sources:
+  enabled:
+    - cyberleninka
+    - crossref
+    - openalex
+    - pubmed
+    - arxiv
+    - cinii
+    - google_serp
+
+  cyberleninka:
+    base_url: "https://cyberleninka.ru"
+    search_path: "/search"
+    request_delay: 3
+    max_retries: 3
+    # Таймаут одной страницы (сек). При CAPTCHA/медленной загрузке увеличьте до 60–90
+    timeout: 60
+    # true = поиск через браузер. КиберЛенинка может показывать CAPTCHA для headless — тогда ставим Firefox: playwright install firefox
+    use_playwright: true
+    # false = окно браузера видно (иногда CAPTCHA не показывают). true = без окна (по умолчанию)
+    playwright_headless: true
+    # При CAPTCHA пробуем решить через playwright-recaptcha (reCAPTCHA v2, аудио). Установка: pip install playwright-recaptcha и FFmpeg в PATH
+    # Если CAPTCHA не обходится: поставьте playwright_headless: false — откроется окно браузера, решите капчу вручную один раз
+    # User-Agent для aiohttp и Playwright. На КиберЛенинке почти не помогает (сайт смотрит на автоматизацию, а не только на UA)
+    # user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+  pubmed:
+    # NCBI E-utilities: не более 3 запросов/сек без API key
+    request_delay: 0.4
+    timeout: 60          # общий таймаут ответа (сек); при «таймаут семафора» на Windows увеличьте
+    connect_timeout: 25  # таймаут установки соединения (сек)
+    max_retries: 3       # повторы при ClientConnectorError / Timeout (firewall, VPN, медленная сеть)
+    # Рекомендуется указать email для связи при больших запросах
+    # email: "your@email"
+    # tool: "RAG-Collector"
+
+  cinii:
+    request_delay: 1
+    timeout: 30
+
+  arxiv:
+    base_url: "https://export.arxiv.org/api/query"
+    request_delay: 3
+    timeout: 60
+
+  openalex:
+    base_url: "https://api.openalex.org"
+    request_delay: 1.0
+    timeout: 30
+    # User-Agent для polite pool (рекомендация OpenAlex)
+    # user_agent: "RAG-Collector/1.0 (https://github.com/...; mailto:your@email)"
+
+  crossref:
+    base_url: "https://api.crossref.org"
+    request_delay: 1.5  # Увеличено для вежливости к API
+    timeout: 30
+    # Порог релевантности (0.0-1.0): документы с меньшей релевантностью отфильтровываются
+    # Рекомендуется: 0.4-0.5 для широкого охвата, 0.6+ для строгой фильтрации
+    relevance_threshold: 0.2  # Низкий порог для кириллицы/латиницы; при 0 проходов берётся топ по релевантности
+    # User-Agent с mailto — для polite pool (рекомендация CrossRef)
+    # user_agent: "RAG-Collector/1.0 (https://github.com/...; mailto:your@email)"
+    # PDF по DOI через Unpaywall, если CrossRef не вернул ссылку (email обязателен для API)
+    use_unpaywall: true
+    unpaywall_email: "dutsir@mail.ru"   # укажите email — тогда для статей без PDF в CrossRef будет запрос к Unpaywall
+    unpaywall_delay: 0.3  # пауза между запросами к Unpaywall (сек)
+    # Настройки определения языка
+    language_detection:
+      min_text_length: 100  # Минимальная длина текста для определения языка
+      use_text_content: true  # Использовать полный текст для определения языка
+      strict_filtering: true  # Строгая фильтрация по языку
+
+  google_serp:
+    base_url: "https://www.google.com/search"
+    request_delay: 3
+    max_retries: 3
+
+text_processing:
+  chunk_size_tokens_min: 500
+  chunk_size_tokens_max: 2000
+  chunk_overlap_tokens: 100
+  tokenizer: "tiktoken"  # tiktoken | spacy
+  tiktoken_encoding: "cl100k_base"
+  # Макс. чанков на документ — меньше памяти на длинных статьях
+  max_chunks_per_document: 25
+  # Коррекции определения языка (для исправления ошибок детектора)
+  language_corrections:
+    sr: ["sh", "hr", "bs", "cnr"]  # Сербский и похожие языки
+    ru: ["uk", "be", "kk"]         # Русский и похожие
+  # Этап 4: семантическое чанкование на эмбеддингах (граница при смене темы).
+  # Требует: pip install sentence-transformers. При true первый запрос может «зависнуть» на 30–60 с (загрузка модели).
+  # При false — быстрое чанкование по абзацам без задержек.
+  use_embedding_chunker: false
+  similarity_threshold: 0.5   # граница чанка при сходстве соседних предложений ниже порога
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+
+language_detection:
+  provider: "langdetect"  # langdetect | fasttext
+  supported_languages:
+    - ru
+    - en
+    - fr
+    - de
+    - es
+    - zh
+    - ja
+    - ko
+    - ar
+    - he
+    - yi
+
+validation:
+  min_chunk_length: 50
+  min_abstract_length: 20
+  # Минимум ключевых слов из запроса, которые должны встретиться в abstract+full_text (1–10)
+  min_keyword_matches: 2
+  # Множитель для запроса к источнику: запрашиваем max_results * multiplier сырых результатов,
+  # чтобы после отбраковки пустых/непрошедших валидацию набрать до max_results на источник (1–10)
+  max_results_multiplier: 5
+  # Максимальное количество попыток повторного запроса к источнику для добра документов до нужного количества (0–3)
+  # Если после первого запроса документов недостаточно, система автоматически сделает повторные запросы с увеличенным лимитом
+  max_refetch_attempts: 2
+  deduplication_hash_fields:
+    - title
+    - url
+    - abstract
+
+export:
+  ndjson_default_path: "./exports"
+  include_processing_info: true
+
+logging:
+  level: "INFO"
+  format: "json"

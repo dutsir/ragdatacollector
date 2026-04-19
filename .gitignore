@@ -1,0 +1,30 @@
+# Секреты
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Debug / export
+debug/
+export/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Тестовые файлы
+test_request.py
+test_request.ps1
+test_request.sh

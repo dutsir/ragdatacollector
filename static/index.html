@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Data Collector</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface2: #232736;
+            --border: #2e3348;
+            --primary: #6c63ff;
+            --primary-hover: #7f78ff;
+            --text: #e4e6f0;
+            --text-muted: #8b8fa8;
+            --success: #34d399;
+            --warning: #fbbf24;
+            --error: #f87171;
+            --info: #60a5fa;
+            --radius: 10px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+        header {
+            text-align: center;
+            padding: 32px 0 16px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 28px;
+        }
+        header h1 { font-size: 1.8rem; font-weight: 700; letter-spacing: -0.5px; }
+        header h1 span { color: var(--primary); }
+        header p { color: var(--text-muted); margin-top: 6px; font-size: .95rem; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--surface); border-radius: var(--radius); padding: 4px; }
+        .tab-btn {
+            flex: 1; padding: 10px 12px; border: none; background: transparent; color: var(--text-muted);
+            font-size: .9rem; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all .2s;
+        }
+        .tab-btn:hover { color: var(--text); background: var(--surface2); }
+        .tab-btn.active { background: var(--primary); color: #fff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Forms */
+        .form-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .form-row { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+        .form-group { flex: 1; min-width: 200px; }
+        .form-group label {
+            display: block; margin-bottom: 6px; font-size: .82rem;
+            font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px;
+        }
+        input, select, textarea {
+            width: 100%; padding: 10px 14px; background: var(--surface2); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-size: .92rem; outline: none; transition: border .2s;
+            font-family: inherit;
+        }
+        input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+        textarea { resize: vertical; min-height: 60px; }
+
+        /* Checkbox grid */
+        .checkbox-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+        .cb-label {
+            display: flex; align-items: center; gap: 6px; padding: 6px 12px;
+            background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+            font-size: .85rem; cursor: pointer; transition: all .2s; user-select: none;
+        }
+        .cb-label:hover { border-color: var(--primary); }
+        .cb-label input { width: auto; margin: 0; accent-color: var(--primary); }
+        .cb-label input:checked + span { color: var(--primary); font-weight: 600; }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 12px 28px; border: none; border-radius: 8px;
+            font-size: .95rem; font-weight: 600; cursor: pointer; transition: all .2s;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); }
+        .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+        .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 8px 16px; font-size: .85rem; }
+        .btn-secondary:hover { border-color: var(--primary); }
+        .btn-sm { padding: 5px 12px; font-size: .78rem; border-radius: 6px; }
+
+        .btn-row { display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+
+        /* Status bar */
+        .status-bar {
+            padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;
+            display: none; font-size: .9rem; align-items: center; gap: 10px;
+        }
+        .status-bar.show { display: flex; }
+        .status-bar.info { background: rgba(96,165,250,.12); border: 1px solid rgba(96,165,250,.3); color: var(--info); }
+        .status-bar.success { background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.3); color: var(--success); }
+        .status-bar.error { background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.3); color: var(--error); }
+        .spinner { width: 18px; height: 18px; border: 2px solid transparent; border-top-color: currentColor; border-radius: 50%; animation: spin .8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Results */
+        .results-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
+        }
+        .results-header h2 { font-size: 1.15rem; }
+        .results-stats { display: flex; gap: 16px; }
+        .stat { text-align: center; }
+        .stat-val { font-size: 1.4rem; font-weight: 700; color: var(--primary); }
+        .stat-label { font-size: .75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+
+        /* Document cards */
+        .doc-list { display: flex; flex-direction: column; gap: 12px; }
+        .source-header {
+            font-size: .9rem; font-weight: 700; color: var(--text-muted);
+            margin: 16px 0 8px; padding: 8px 12px;
+            background: var(--surface); border-radius: 6px; border-left: 3px solid var(--primary);
+        }
+        .doc-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            transition: border-color .2s;
+        }
+        .doc-card:hover { border-color: var(--primary); }
+        .doc-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+        .doc-title { font-size: 1rem; font-weight: 600; flex: 1; }
+        .doc-title a { color: var(--text); text-decoration: none; }
+        .doc-title a:hover { color: var(--primary); text-decoration: underline; }
+        .doc-badges { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
+        .badge {
+            font-size: .72rem; padding: 3px 8px; border-radius: 4px;
+            font-weight: 600; text-transform: uppercase; letter-spacing: .3px;
+        }
+        .badge-source { background: rgba(108,99,255,.2); color: var(--primary); }
+        .badge-lang { background: rgba(52,211,153,.15); color: var(--success); }
+        .badge-score { background: rgba(251,191,36,.15); color: var(--warning); }
+        .badge-access { background: rgba(96,165,250,.15); color: var(--info); }
+        .doc-meta { font-size: .82rem; color: var(--text-muted); margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+        .doc-abstract {
+            font-size: .88rem; color: var(--text-muted); line-height: 1.55;
+            padding: 10px 14px; background: var(--surface2); border-radius: 8px; margin-bottom: 10px;
+        }
+
+        /* Expandable sections */
+        .expandable { margin-top: 8px; }
+        .expand-btn {
+            background: none; border: 1px solid var(--border); color: var(--text-muted);
+            padding: 4px 10px; border-radius: 4px; font-size: .78rem; cursor: pointer;
+            margin-right: 6px; margin-bottom: 4px; transition: all .2s;
+        }
+        .expand-btn:hover { border-color: var(--primary); color: var(--text); }
+        .expand-btn.active { border-color: var(--primary); color: var(--primary); }
+        .expand-content { display: none; margin-top: 8px; }
+        .expand-content.open { display: block; }
+
+        .chunk-item {
+            background: var(--surface2); border-radius: 6px; padding: 10px 14px;
+            margin-bottom: 6px; font-size: .83rem; line-height: 1.5; color: var(--text-muted);
+            border-left: 3px solid var(--primary);
+        }
+        .chunk-num { color: var(--primary); font-weight: 700; margin-right: 6px; }
+
+        /* Files */
+        .file-item {
+            display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+            background: var(--surface2); border-radius: 6px; margin-bottom: 4px; font-size: .83rem;
+        }
+        .file-item a { color: var(--info); text-decoration: none; }
+        .file-item a:hover { text-decoration: underline; }
+        .file-type { background: rgba(108,99,255,.2); color: var(--primary); padding: 2px 6px; border-radius: 3px; font-size: .72rem; font-weight: 700; }
+
+        /* Metadata & Processing info */
+        .meta-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 6px; font-size: .82rem;
+        }
+        .meta-item { padding: 6px 10px; background: var(--surface2); border-radius: 4px; }
+        .meta-key { color: var(--text-muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .3px; }
+        .meta-val { color: var(--text); font-weight: 500; word-break: break-all; }
+
+        /* Doc JSON */
+        .doc-json {
+            background: var(--surface2); border-radius: 6px; padding: 12px; margin-top: 8px;
+            overflow-x: auto; max-height: 400px; overflow-y: auto;
+        }
+        .doc-json pre { font-family: 'Consolas', 'Monaco', monospace; font-size: .78rem; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+
+        /* JSON viewer */
+        .json-viewer {
+            display: none; margin-top: 12px; background: var(--surface2); border-radius: 8px;
+            padding: 16px; overflow-x: auto; max-height: 600px; overflow-y: auto;
+        }
+        .json-viewer.open { display: block; }
+        .json-viewer pre { font-family: 'Consolas', 'Monaco', monospace; font-size: .82rem; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+
+        .copy-toast {
+            position: fixed; bottom: 24px; right: 24px; background: var(--success); color: #000;
+            padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: .9rem;
+            opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999;
+        }
+        .copy-toast.show { opacity: 1; }
+
+        footer { text-align: center; padding: 24px 0; color: var(--text-muted); font-size: .82rem; border-top: 1px solid var(--border); margin-top: 32px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><span>RAG</span> Data Collector</h1>
+            <p>Сбор научных статей, поиск в интернете, парсинг URL</p>
+        </header>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="science">Научные источники</button>
+            <button class="tab-btn" data-tab="serp">Поиск SERP</button>
+            <button class="tab-btn" data-tab="url">Парсинг URL</button>
+        </div>
+
+        <!-- Status -->
+        <div class="status-bar" id="statusBar">
+            <div class="spinner" id="statusSpinner"></div>
+            <span id="statusText"></span>
+        </div>
+
+        <!-- Tab 1: Science -->
+        <div class="tab-content active" id="tab-science">
+            <div class="form-card">
+                <div class="form-row">
+                    <div class="form-group" style="flex:2">
+                        <label>Ключевые слова (через запятую)</label>
+                        <input type="text" id="sci-keywords" placeholder="thesis, climate change" value="thesis, climate change">
+                    </div>
+                    <div class="form-group">
+                        <label>Макс. результатов (на источник)</label>
+                        <input type="number" id="sci-max" value="3" min="1" max="500">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Дата от</label>
+                        <input type="date" id="sci-from" value="2020-01-01">
+                    </div>
+                    <div class="form-group">
+                        <label>Дата до</label>
+                        <input type="date" id="sci-to" value="2026-02-01">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Языки</label>
+                        <div class="checkbox-grid" id="sci-langs">
+                            <label class="cb-label"><input type="checkbox" value="ru" checked><span>RU</span></label>
+                            <label class="cb-label"><input type="checkbox" value="en" checked><span>EN</span></label>
+                            <label class="cb-label"><input type="checkbox" value="de"><span>DE</span></label>
+                            <label class="cb-label"><input type="checkbox" value="fr"><span>FR</span></label>
+                            <label class="cb-label"><input type="checkbox" value="es"><span>ES</span></label>
+                            <label class="cb-label"><input type="checkbox" value="zh"><span>ZH</span></label>
+                            <label class="cb-label"><input type="checkbox" value="ja"><span>JA</span></label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Источники</label>
+                        <div class="checkbox-grid" id="sci-sources">
+                            <label class="cb-label"><input type="checkbox" value="crossref" checked><span>CrossRef</span></label>
+                            <label class="cb-label"><input type="checkbox" value="cyberleninka" checked><span>CyberLeninka</span></label>
+                            <label class="cb-label"><input type="checkbox" value="openalex" checked><span>OpenAlex</span></label>
+                            <label class="cb-label"><input type="checkbox" value="pubmed" checked><span>PubMed</span></label>
+                            <label class="cb-label"><input type="checkbox" value="arxiv" checked><span>arXiv</span></label>
+                            <label class="cb-label"><input type="checkbox" value="cinii" checked><span>CiNii</span></label>
+                        </div>
+                    </div>
+                </div>
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="sci-submit">Собрать данные</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: SERP -->
+        <div class="tab-content" id="tab-serp">
+            <div class="form-card">
+                <div class="form-row">
+                    <div class="form-group" style="flex:2">
+                        <label>Поисковый запрос</label>
+                        <input type="text" id="serp-keywords" placeholder="climate change research 2024" value="climate change research 2024">
+                    </div>
+                    <div class="form-group">
+                        <label>Макс. результатов</label>
+                        <input type="number" id="serp-max" value="5" min="1" max="100">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Язык</label>
+                        <div class="checkbox-grid" id="serp-langs">
+                            <label class="cb-label"><input type="checkbox" value="en" checked><span>EN</span></label>
+                            <label class="cb-label"><input type="checkbox" value="ru"><span>RU</span></label>
+                        </div>
+                    </div>
+                </div>
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="serp-submit">Найти в интернете</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: URL -->
+        <div class="tab-content" id="tab-url">
+            <div class="form-card">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>URL-адреса (по одному на строку)</label>
+                        <textarea id="url-list" rows="4" placeholder="https://en.wikipedia.org/wiki/Climate_change&#10;https://arxiv.org/abs/2301.10303">https://en.wikipedia.org/wiki/Climate_change</textarea>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="flex:2">
+                        <label>Ключевые слова (опционально)</label>
+                        <input type="text" id="url-keywords" placeholder="climate" value="climate">
+                    </div>
+                    <div class="form-group">
+                        <label>Макс. результатов</label>
+                        <input type="number" id="url-max" value="5" min="1" max="100">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Языки</label>
+                        <div class="checkbox-grid" id="url-langs">
+                            <label class="cb-label"><input type="checkbox" value="ru" checked><span>RU</span></label>
+                            <label class="cb-label"><input type="checkbox" value="en" checked><span>EN</span></label>
+                        </div>
+                    </div>
+                </div>
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="url-submit">Парсить URL</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div id="results" style="display:none">
+            <div class="results-header">
+                <h2 id="results-title">Результаты</h2>
+                <div class="results-stats">
+                    <div class="stat"><div class="stat-val" id="stat-docs">0</div><div class="stat-label">Документов</div></div>
+                    <div class="stat"><div class="stat-val" id="stat-sources">0</div><div class="stat-label">Источников</div></div>
+                    <div class="stat"><div class="stat-val" id="stat-chunks">0</div><div class="stat-label">Чанков</div></div>
+                    <div class="stat"><div class="stat-val" id="stat-score">0</div><div class="stat-label">Ср. оценка</div></div>
+                </div>
+            </div>
+            <div class="btn-row" style="margin-bottom:16px">
+                <button class="btn btn-secondary" id="toggle-json">Показать весь JSON</button>
+                <button class="btn btn-secondary" id="btn-copy-json">Копировать JSON</button>
+                <button class="btn btn-secondary" id="btn-download-ndjson" style="display:none">Скачать NDJSON</button>
+            </div>
+            <div class="json-viewer" id="json-viewer"><pre id="json-content"></pre></div>
+            <div class="doc-list" id="doc-list"></div>
+        </div>
+
+        <div class="copy-toast" id="copyToast">Скопировано!</div>
+
+        <footer>RAG Data Collector &mdash; FastAPI + Docker</footer>
+    </div>
+
+    <script>
+    const API = window.location.origin;
+    let currentTaskId = null;
+    let lastDocuments = [];
+
+    // --- Tabs ---
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        });
+    });
+
+    // --- Status ---
+    function showStatus(text, type = 'info', showSpinner = false) {
+        const bar = document.getElementById('statusBar');
+        bar.className = 'status-bar show ' + type;
+        document.getElementById('statusText').textContent = text;
+        document.getElementById('statusSpinner').style.display = showSpinner ? 'block' : 'none';
+    }
+    function hideStatus() { document.getElementById('statusBar').className = 'status-bar'; }
+
+    // --- Helpers ---
+    function getCheckedValues(id) {
+        const el = typeof id === 'string' ? document.getElementById(id) : id;
+        return [...el.querySelectorAll('input[type=checkbox]:checked')].map(c => c.value);
+    }
+    function escHtml(s) {
+        if (!s) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+    function showToast(msg) {
+        const t = document.getElementById('copyToast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    // --- Submit handlers ---
+    document.getElementById('sci-submit').addEventListener('click', () => {
+        const kw = document.getElementById('sci-keywords').value.trim();
+        if (!kw) return alert('Введите ключевые слова');
+        submitTask({
+            task_type: 'science',
+            keywords: kw.split(',').map(s => s.trim()).filter(Boolean),
+            date_from: document.getElementById('sci-from').value || null,
+            date_to: document.getElementById('sci-to').value || null,
+            languages: getCheckedValues('sci-langs'),
+            sources: getCheckedValues('sci-sources'),
+            max_results: parseInt(document.getElementById('sci-max').value) || 3
+        });
+    });
+
+    document.getElementById('serp-submit').addEventListener('click', () => {
+        const kw = document.getElementById('serp-keywords').value.trim();
+        if (!kw) return alert('Введите поисковый запрос');
+        submitTask({
+            task_type: 'web_search',
+            keywords: kw.split(',').map(s => s.trim()).filter(Boolean),
+            languages: getCheckedValues('serp-langs'),
+            sources: ['google_serp'],
+            max_results: parseInt(document.getElementById('serp-max').value) || 5
+        });
+    });
+
+    document.getElementById('url-submit').addEventListener('click', () => {
+        const urlsText = document.getElementById('url-list').value.trim();
+        if (!urlsText) return alert('Введите URL-адреса');
+        const kw = document.getElementById('url-keywords').value.trim();
+        submitTask({
+            task_type: 'target_site',
+            keywords: kw ? kw.split(',').map(s => s.trim()).filter(Boolean) : ['document'],
+            urls: urlsText.split('\n').map(s => s.trim()).filter(Boolean),
+            languages: getCheckedValues('url-langs'),
+            sources: ['universal_url'],
+            max_results: parseInt(document.getElementById('url-max').value) || 5
+        });
+    });
+
+    // --- Task submission & polling ---
+    async function submitTask(body) {
+        showStatus('Отправка запроса...', 'info', true);
+        document.getElementById('results').style.display = 'none';
+        document.querySelectorAll('.btn-primary').forEach(b => b.disabled = true);
+        try {
+            const res = await fetch(API + '/api/v1/collect', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({detail: res.statusText}));
+                throw new Error(err.detail || 'Ошибка сервера');
+            }
+            const data = await res.json();
+            currentTaskId = data.task_id;
+            showStatus('Задача создана (' + currentTaskId.slice(0,8) + '...). Идет сбор данных...', 'info', true);
+            pollTask(currentTaskId);
+        } catch (e) {
+            showStatus('Ошибка: ' + e.message, 'error');
+            document.querySelectorAll('.btn-primary').forEach(b => b.disabled = false);
+        }
+    }
+
+    async function pollTask(taskId) {
+        let attempts = 0;
+        const poll = async () => {
+            if (taskId !== currentTaskId) return;
+            attempts++;
+            try {
+                const res = await fetch(API + '/api/v1/tasks/' + taskId);
+                if (!res.ok) throw new Error('Не удалось получить статус');
+                const task = await res.json();
+                if (task.status === 'completed') {
+                    showStatus('Готово! Собрано ' + task.result_count + ' документов', 'success');
+                    renderResults(task.documents || [], taskId);
+                    document.querySelectorAll('.btn-primary').forEach(b => b.disabled = false);
+                    return;
+                }
+                if (task.status === 'failed') {
+                    showStatus('Ошибка: ' + (task.error || 'Неизвестная ошибка'), 'error');
+                    document.querySelectorAll('.btn-primary').forEach(b => b.disabled = false);
+                    return;
+                }
+                if (attempts >= 120) {
+                    showStatus('Превышено время ожидания (10 мин)', 'error');
+                    document.querySelectorAll('.btn-primary').forEach(b => b.disabled = false);
+                    return;
+                }
+                showStatus('Сбор данных... (' + Math.floor(attempts * 5) + ' сек)', 'info', true);
+                setTimeout(poll, 5000);
+            } catch (e) {
+                showStatus('Ошибка: ' + e.message, 'error');
+                document.querySelectorAll('.btn-primary').forEach(b => b.disabled = false);
+            }
+        };
+        setTimeout(poll, 2000);
+    }
+
+    // --- Render results ---
+    function renderResults(documents, taskId) {
+        lastDocuments = documents;
+        const resultsEl = document.getElementById('results');
+        resultsEl.style.display = 'block';
+
+        // Stats
+        const sources = new Set(documents.map(d => d.source));
+        const totalChunks = documents.reduce((s, d) => s + (d.full_text_chunks || []).length, 0);
+        const avgScore = documents.length
+            ? (documents.reduce((s, d) => s + (d.processing_info?.validation_score || 0), 0) / documents.length).toFixed(2)
+            : '0';
+        document.getElementById('stat-docs').textContent = documents.length;
+        document.getElementById('stat-sources').textContent = sources.size;
+        document.getElementById('stat-chunks').textContent = totalChunks;
+        document.getElementById('stat-score').textContent = avgScore;
+
+        // JSON
+        document.getElementById('json-content').textContent = JSON.stringify({documents}, null, 2);
+        document.getElementById('json-viewer').classList.remove('open');
+        document.getElementById('toggle-json').textContent = 'Показать весь JSON';
+
+        // NDJSON button
+        const ndjsonBtn = document.getElementById('btn-download-ndjson');
+        if (taskId) {
+            ndjsonBtn.style.display = 'inline-flex';
+            ndjsonBtn.onclick = () => window.open(API + '/api/v1/tasks/' + taskId + '/ndjson', '_blank');
+        }
+
+        // Document cards grouped by source
+        const docList = document.getElementById('doc-list');
+        docList.innerHTML = '';
+        const grouped = {};
+        documents.forEach(d => {
+            const src = d.source || 'Unknown';
+            if (!grouped[src]) grouped[src] = [];
+            grouped[src].push(d);
+        });
+
+        for (const [source, docs] of Object.entries(grouped)) {
+            const h = document.createElement('div');
+            h.className = 'source-header';
+            h.textContent = source + ' (' + docs.length + ' ' + pluralDocs(docs.length) + ')';
+            docList.appendChild(h);
+
+            docs.forEach((doc, idx) => {
+                const uid = source.replace(/\s/g, '_') + '_' + idx;
+                docList.appendChild(createDocCard(doc, uid));
+            });
+        }
+
+        resultsEl.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+
+    function createDocCard(doc, uid) {
+        const card = document.createElement('div');
+        card.className = 'doc-card';
+        const chunks = doc.full_text_chunks || [];
+        const score = doc.processing_info?.validation_score ?? '-';
+        const authors = (doc.authors || []).join(', ');
+        const abstract = doc.abstract || '';
+        const files = doc.files || [];
+        const meta = doc.metadata || {};
+        const pi = doc.processing_info || {};
+
+        let html = '';
+
+        // Header
+        html += '<div class="doc-card-header">';
+        html += '<div class="doc-title"><a href="' + escHtml(doc.url || '#') + '" target="_blank">' + escHtml(doc.title || 'Без названия') + '</a></div>';
+        html += '<div class="doc-badges">';
+        html += '<span class="badge badge-source">' + escHtml(doc.source) + '</span>';
+        html += '<span class="badge badge-lang">' + escHtml(doc.language || '?') + '</span>';
+        html += '<span class="badge badge-score">' + score + '</span>';
+        if (doc.file_access) html += '<span class="badge badge-access">' + escHtml(doc.file_access) + '</span>';
+        html += '</div></div>';
+
+        // Meta line
+        html += '<div class="doc-meta">';
+        if (doc.date) html += '<span>&#128197; ' + escHtml(doc.date) + '</span>';
+        if (authors) html += '<span>&#128100; ' + escHtml(authors) + '</span>';
+        if (doc.doi) html += '<span>DOI: <a href="https://doi.org/' + escHtml(doc.doi) + '" target="_blank" style="color:var(--info)">' + escHtml(doc.doi) + '</a></span>';
+        if (doc.id) html += '<span>ID: ' + escHtml(doc.id.slice(0, 12)) + '...</span>';
+        html += '</div>';
+
+        // Abstract
+        if (abstract) {
+            const shortAbstract = abstract.length > 500 ? abstract.slice(0, 500) + '...' : abstract;
+            html += '<div class="doc-abstract">' + escHtml(shortAbstract) + '</div>';
+        }
+
+        // Action buttons
+        html += '<div class="expandable"><div class="btn-row">';
+        if (chunks.length) html += '<button class="expand-btn" onclick="toggle(\'' + uid + '-chunks\', this)">Чанки (' + chunks.length + ')</button>';
+        if (files.length) html += '<button class="expand-btn" onclick="toggle(\'' + uid + '-files\', this)">Файлы (' + files.length + ')</button>';
+        if (Object.keys(meta).length) html += '<button class="expand-btn" onclick="toggle(\'' + uid + '-meta\', this)">Метаданные</button>';
+        html += '<button class="expand-btn" onclick="toggle(\'' + uid + '-pi\', this)">Processing</button>';
+        html += '<button class="expand-btn" onclick="toggle(\'' + uid + '-json\', this)">JSON</button>';
+        html += '<button class="expand-btn" onclick="copyDocJson(\'' + uid + '\')">Копировать</button>';
+        html += '</div>';
+
+        // Chunks
+        if (chunks.length) {
+            html += '<div class="expand-content" id="' + uid + '-chunks">';
+            chunks.forEach((c, i) => {
+                const text = typeof c === 'string' ? c : JSON.stringify(c);
+                const short = text.length > 400 ? text.slice(0, 400) + '...' : text;
+                html += '<div class="chunk-item"><span class="chunk-num">#' + (i + 1) + '</span>' + escHtml(short) + '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Files
+        if (files.length) {
+            html += '<div class="expand-content" id="' + uid + '-files">';
+            files.forEach(f => {
+                html += '<div class="file-item">';
+                html += '<span class="file-type">' + escHtml((f.type || f.file_type || 'file').toUpperCase()) + '</span>';
+                html += '<a href="' + escHtml(f.url) + '" target="_blank">' + escHtml(f.url) + '</a>';
+                if (f.extracted_text) html += '<span style="color:var(--success);font-size:.75rem">extracted</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Metadata
+        if (Object.keys(meta).length) {
+            html += '<div class="expand-content" id="' + uid + '-meta"><div class="meta-grid">';
+            for (const [k, v] of Object.entries(meta)) {
+                html += '<div class="meta-item"><div class="meta-key">' + escHtml(k) + '</div><div class="meta-val">' + escHtml(String(v)) + '</div></div>';
+            }
+            html += '</div></div>';
+        }
+
+        // Processing info
+        html += '<div class="expand-content" id="' + uid + '-pi"><div class="meta-grid">';
+        html += '<div class="meta-item"><div class="meta-key">validation_score</div><div class="meta-val">' + (pi.validation_score ?? '-') + '</div></div>';
+        html += '<div class="meta-item"><div class="meta-key">extraction_method</div><div class="meta-val">' + escHtml(pi.extraction_method || '-') + '</div></div>';
+        html += '<div class="meta-item"><div class="meta-key">chunking_strategy</div><div class="meta-val">' + escHtml(pi.chunking_strategy || '-') + '</div></div>';
+        if (pi.chunk_info) {
+            for (const [k, v] of Object.entries(pi.chunk_info)) {
+                html += '<div class="meta-item"><div class="meta-key">' + escHtml(k) + '</div><div class="meta-val">' + escHtml(String(v)) + '</div></div>';
+            }
+        }
+        html += '</div></div>';
+
+        // Doc JSON
+        html += '<div class="expand-content doc-json" id="' + uid + '-json"><pre id="json-doc-' + uid + '">' + escHtml(JSON.stringify(doc, null, 2)) + '</pre></div>';
+
+        html += '</div>'; // expandable
+
+        card.innerHTML = html;
+        return card;
+    }
+
+    function toggle(id, btn) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.toggle('open');
+        if (btn) btn.classList.toggle('active');
+    }
+
+    function copyDocJson(uid) {
+        const el = document.getElementById('json-doc-' + uid);
+        if (el) {
+            navigator.clipboard.writeText(el.textContent).then(() => showToast('JSON скопирован!'));
+        }
+    }
+
+    // Top-level JSON toggle
+    document.getElementById('toggle-json').addEventListener('click', function() {
+        const v = document.getElementById('json-viewer');
+        v.classList.toggle('open');
+        this.textContent = v.classList.contains('open') ? 'Скрыть JSON' : 'Показать весь JSON';
+    });
+
+    // Copy all JSON
+    document.getElementById('btn-copy-json').addEventListener('click', () => {
+        const text = JSON.stringify({documents: lastDocuments}, null, 2);
+        navigator.clipboard.writeText(text).then(() => showToast('JSON скопирован в буфер!'));
+    });
+
+    function pluralDocs(n) {
+        if (n % 10 === 1 && n % 100 !== 11) return 'документ';
+        if ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) return 'документа';
+        return 'документов';
+    }
+    </script>
+</body>
+</html>
